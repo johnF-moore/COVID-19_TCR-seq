@@ -1,0 +1,293 @@
+---
+title: "analysis_output_1E5_sub2_red1"
+author: "John Moore"
+date: "7/5/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+
+library(dplyr)
+library(tidyr)
+library(here)
+library(ggplot2)
+
+```
+
+
+
+
+
+
+```{r}
+metaclonotype_summary <- function(file, user_chain){
+  
+  #----------------------
+  # 1 Loading tcrDist output and formatting
+  #----------------------
+  
+  MCs= read.table(file= file, sep= "\t", header= T)
+  names(MCs)[names(MCs) == "X"] <- "MC_group" ## Metaclonotype group 
+  
+  if(user_chain == "beta"){
+    names(MCs)[names(MCs) == "cdr3_b_aa"] <- "cdr3_aa"
+  } else if(user_chain == "alpha"){
+    names(MCs)[names(MCs) == "cdr3_a_aa"] <- "cdr3_aa"
+  }
+
+  MCs <- MCs %>% 
+  filter(nsubject > 1) %>% 
+    ## Need some level of publicity to whittle down important metaclonotypes
+  mutate(target_seqs= gsub("\\[|\\]","", target_seqs)) %>%
+    ## Pre-processing to separate collapsed column
+  separate_rows(target_seqs, sep=", ") 
+  
+  #----------------------
+  # 2 Stim-TCRs in Metaclonotypes
+  #----------------------
+  
+  stim_path= here("stim_TCRs","data","TRUST4_stimTCRs_wMD.csv")
+  stimTCRs= read.csv(stim_path) %>% mutate(TCR= paste0(CDR3_aa_alpha,"_",CDR3_aa_beta))
+    ## This version has cleaned CDRs
+  shared_TCRs <- inner_join(MCs, stimTCRs, 
+                            by= c("target_seqs" = paste0("CDR3_aa_", user_chain)))
+  shared_TCRs <- shared_TCRs %>% 
+    group_by(cdr3_aa) %>%
+    mutate(nSubjects= length(unique(subject_id)))
+    ## I don't trust how they count subjects, so I re-calculate that here.
+    ## Should I be worried if the subjects aren't the same? 
+  
+  table(shared_TCRs$nSubjects) %>% 
+    as.data.frame() %>%
+    setNames(nm= c("nSubjects", "count")) %>% 
+    print()
+  
+  #shared_TCRs <- shared_TCRs %>% filter(nSubjects >= num_subjects)
+  
+  
+  print(paste0("Num. of metaclonotypes: ", 
+               length(unique(shared_TCRs$MC_group))))
+  
+  nSharedTCRs <- length(unique(shared_TCRs$target_seqs))
+  print(paste0("Num. of unique clustered antigen-specific TCRs: ",
+               nSharedTCRs))
+
+  propSharedTCRs <- nSharedTCRs/length(unique(stimTCRs$TCR))
+  print(paste0("Prop. of clustered antigen-specific clonotypes: ",
+               round(propSharedTCRs, digits= 2)))
+  ## As compared to about 94% of TCRs that cluster in MCs
+  ## if you don't require the MCs to be shared b/w two subjects
+
+  count_df <- shared_TCRs %>% 
+    group_by(cdr3_aa, target_seqs) %>% 
+      ## cdr3_b_aa is the MC, target_seqs are the CDR3s in the MC
+      ## so sub-grouping MCs by CDR3
+    mutate(target_count= n()) %>% 
+      ## counting number of instances of each CDR3
+    ungroup() %>% 
+    distinct(cdr3_aa, target_seqs, target_count) %>% 
+    group_by(cdr3_aa) %>% 
+    mutate(MC_count= sum(target_count), ## num. CDR3 in each MC
+           MC_TCRs= n()) %>% ## num. of unique CDR3 in each MC
+    ungroup()
+  shared_TCRs <- left_join(shared_TCRs, count_df, 
+                           by= c("cdr3_aa", "target_seqs"))
+
+  #----------------------
+  # 3 antigen-specific Metaclonotypes
+  #----------------------
+  
+  ag_count_df <- shared_TCRs %>% 
+    group_by(antigen, cdr3_aa, target_seqs) %>% 
+    mutate(ag_target_count= n()) %>% 
+    ungroup() %>% 
+    distinct(cdr3_aa, target_seqs, ag_target_count, antigen) %>% 
+    group_by(antigen, cdr3_aa) %>% 
+    mutate(ag_MC_count= sum(ag_target_count),
+           ag_MC_TCRs= n()) %>% 
+    ungroup()
+
+  print("Num. of CDR3s in each antigen group (redundant)")
+  ag_count_df %>% 
+    group_by(antigen) %>% 
+    summarize(sum(ag_target_count)) %>% 
+    print()
+  
+  #----------------------
+  # 4 TCRs in multiple metaclonotypes 
+  #----------------------
+  
+  outersect <- function(x, ...) {
+    big.vec <- c(x, ...)
+    duplicates <- big.vec[duplicated(big.vec)]
+      ## Find all duplicated entries
+    not_dupl <- setdiff(big.vec, unique(duplicates))
+      ## Remove duplicated entries from input vectors 
+    return(not_dupl)
+  }
+
+  MCspec_TCR <- outersect(shared_TCRs$target_seqs)
+
+  print(paste0("Num. of unique TCRs in only one metaclonotype: ",
+               length(MCspec_TCR)))
+  print(paste0("Total num. unique TCRs: ", length(unique(shared_TCRs$target_seqs))))
+
+  #----------------------
+  # 5 Metaclonotype-restricted TCRs
+  #----------------------
+  
+  shared_TCRs <- shared_TCRs %>% 
+    group_by(MC_group) %>% 
+    mutate(isShared= !all(target_seqs %in% MCspec_TCR)) 
+  
+  print("How many metaclonotypes only have CDR3 that are restricted to that MC?")
+  shared_TCRs %>% 
+    group_by(MC_group) %>%
+    distinct(isShared) %>% 
+    ungroup() %>%
+    count(isShared) %>% 
+    print()
+
+  print("How many CDR3s make up the shared metaclonotypes?")
+  shared_TCRs %>% 
+    filter(isShared == F) %>% 
+    pull(target_seqs) %>% 
+    length() %>% 
+    print()
+  
+  #----------------------
+  # 6 non-antigen-specific TCRs
+  #----------------------
+  
+  shared_TCRs <- shared_TCRs %>% 
+    group_by(MC_group) %>%
+    mutate(isAgspec= length(unique(antigen)) == 1) %>% 
+    ungroup() 
+
+  print("How many metaclonotypes are antigen-specific?")
+  shared_TCRs %>% 
+    distinct(MC_group, isAgspec) %>% 
+    count(isAgspec) %>% 
+    print()
+
+  print("Antigen-specific Metaclonotypes")
+  shared_TCRs %>% 
+    filter(isAgspec) %>% 
+    distinct(MC_group, antigen) %>% 
+    count(antigen) %>% 
+    print()
+  
+  #----------------------
+  # 7 non-antigen-specific TCRs
+  #----------------------
+  
+  notAgSpec <- shared_TCRs %>% filter(!isAgspec)
+  print(paste0("Dim no ag: ", paste(dim(notAgSpec), collapse= "-")))
+
+  no_agCMV <- notAgSpec %>% filter(antigen != "CMV")
+  print(paste0("Dim no ag, no cmv: ", paste(dim(no_agCMV), collapse= "-")))
+  ## Most of the duplicated TCRs are in CMV. 
+  ## I'm not sure if this means that the TCRs that are responding to CMV
+  ## are not responding in an antigen-specific manner 
+  ## (i.e. bystander activation is being marked as CMV response)
+  ## I'm not sure if this makes sense based on the assay or if they have a   
+  ## way to distinguish bystander and TCR activation. 
+
+  ## how do I want to filter the MCs that aren't antigen-specific
+  ## Or do I want to just remove all MCs that aren't antigen-specific?
+  ## I could move from the 1E5 reference to the 1E6 reference and see if that solves the issue. 
+
+
+  #----------------------
+  # 8 data output
+  #----------------------
+  
+  return(shared_TCRs)
+}
+```
+
+
+```{r}
+alpha_path=here("stim_TCRs","TCRdist","tcrdist3_analysis",
+                "output","alpha_sub2_red1",
+                "ab_TCRdist_input.csv_alpha.ranked_centers_bkgd_ctlr_1E5.tsv")
+ 
+alpha_MCs <- metaclonotype_summary(file= alpha_path, user_chain= "alpha")
+
+beta_path= here("stim_TCRs","TCRdist","tcrdist3_analysis",
+                "output","beta_sub2_red1",
+                "ab_TCRdist_input.csv_beta.ranked_centers_bkgd_ctlr_1E5.tsv")
+beta_MCs <- metaclonotype_summary(file= beta_path, user_chain= "beta")
+```
+
+```{r}
+#------------
+# Getting antigen-specific clonotypes
+#------------
+alpha_ag <- alpha_MCs %>% filter(isAgspec)
+# write.csv(alpha_ag, 
+#           here("stim_TCRs","TCRdist","tcrdist3_analysis","output",
+#                "ag_spec_data","alpha_sub2_red1_1E5_agSpec.csv"),
+#           row.names= F)
+
+beta_ag  <- beta_MCs  %>% filter(isAgspec)
+# write.csv(beta_ag, 
+#           here("stim_TCRs","TCRdist","tcrdist3_analysis","output",
+#                "ag_spec_data","beta_sub2_red1_1E5_agSpec.csv"),
+#           row.names= F)
+```
+
+```{r}
+#-------
+# Getting MCs that don't share their CDR3s
+#-------
+alpha_notShared= alpha_MCs %>% filter(!isShared)
+# write.csv(alpha_notShared, 
+#           here("stim_TCRs","TCRdist","tcrdist3_analysis","output",
+#                "notShared_data","alpha_sub2_red1_1E5_notShared.csv"),
+#           row.names= F)
+
+beta_notShared=  beta_MCs %>% filter(!isShared)
+# write.csv(beta_notShared, 
+#           here("stim_TCRs","TCRdist","tcrdist3_analysis","output",
+#                "notShared_data","beta_sub2_red1_1E5_notShared.csv"),
+#           row.names= F)
+```
+
+
+
+```{r}
+#----------------
+# Getting MCs w/o small world effect 
+#----------------
+sort(unique(beta_MCs$target_hits)) 
+  ## I would say that 162 and 169 target sequences represents small world effect
+  ## rather than real cluster (probably unless it's CMV?)
+sort(unique(beta_MCs$bkgd_hits))
+  ## Nothing crazy here
+beta_MCs %>% mutate(isSmallWorld= ) %>% filter(!isSmallWorld)
+
+
+
+sort(unique(alpha_MCs$target_hits)) 
+  ## I would say that 109, 110, 112 target sequences represents small world effect
+  ## rather than real cluster (probably unless it's CMV?)
+sort(unique(alpha_MCs$bkgd_hits))
+  ## Hard to pick a cutoff here. Maybe remove anything above the beta cutoff of 22?
+nrow(alpha_MCs[alpha_MCs$bkgd_hits <= 22,])
+  ## That would remove half of the rows
+alpha_MCs %>% mutate(isSmallWorld= ) %>% filter(!isSmallWorld)
+```
+
+
+
+
+
+
+
+
+
+
+
+

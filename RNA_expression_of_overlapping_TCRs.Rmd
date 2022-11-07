@@ -1,0 +1,487 @@
+---
+title: "RNA & ADT Expression of Cells with Overlapping TCRs"
+author: "John Moore"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(dplyr)
+library(ggplot2)
+library(Seurat)
+library(here)
+library(patchwork)
+library(gridExtra)
+library(pheatmap)
+library(DT)
+library(RColorBrewer)
+here::i_am("stim_TCRs/TCR_summaries/scripts/RNA_expression_of_overlapping_TCRs.R")
+
+path= "/stor/work/Ehrlich_COVID19/analysis/seurat/Qi_clustering/stimulatedTCR/stimuT_clusters_harmony.rds"
+stimTCR_obj= readRDS(path)
+plot_vec= c(11,7)
+```
+
+
+```{r}
+##-----------
+# Adding TRUST4 TCR meta.data
+##-----------
+meta_data= stimTCR_obj@meta.data
+path= here("stim_TCRs","data","overlapping_TCRs","stimTCR_for_metadata.csv")
+TRUST4_TCR_data= read.csv(path)
+meta_data= left_join(meta_data, TRUST4_TCR_data, by= "barcode")
+stimTCR_obj@meta.data= meta_data
+```
+
+
+```{r}
+##-----------
+# Subsetting overlapping TCRs
+##-----------
+path= here("stim_TCRs","data","overlapping_TCRs","all_overlapping_stimTCRs.csv")
+all_overlapping_stimTCRs= read.csv(path) %>% pull(x)
+path= here("stim_TCRs","data","overlapping_TCRs","overlap_unstim_TCRs.csv")
+overlap_unstim_TCRs= read.csv(path) %>% pull(x)
+stimTCR_obj@meta.data$is_overlap= stimTCR_obj@meta.data$TCR %in% all_overlapping_stimTCRs
+stimTCR_obj@meta.data$is_unstim_overlap= stimTCR_obj@meta.data$TCR %in% overlap_unstim_TCRs
+  ## Adding overlap data to visualize on UMAP & subset
+stimTCR_MD= stimTCR_obj@meta.data %>% filter(!is.na(TCR))
+# path= here("stim_TCRs","data","stimTCRs_noOverlap.csv")
+# write.csv(stimTCR_MD, path, row.names= F)
+
+overlap_obj= stimTCR_obj ## copying stimTCR_obj
+overlap_obj@meta.data = stimTCR_obj@meta.data[stimTCR_obj$is_overlap,]
+  ## Manually overwriting the meta.data, thus subsetting the obj b/c subset() wasn't working.
+  ## Keeping only overlapping TCRs
+
+unstim_overlap_obj= stimTCR_obj
+unstim_overlap_obj@meta.data= stimTCR_obj@meta.data[stimTCR_obj$is_unstim_overlap,] 
+  ## Keeping only unstimulated overlapping TCRs
+```
+
+
+
+```{r, fig.dim= plot_vec}
+##-----------
+# Visualizing Overlapping TCRs on UMAP ADT & RNA Expression Profile
+##-----------
+p1= DimPlot(stimTCR_obj,cells.highlight= stimTCR_obj$barcode[stimTCR_obj$is_overlap]) + 
+  NoLegend() + 
+  ggtitle("All \n Overlapping TCRs")
+p2= DimPlot(stimTCR_obj,cells.highlight= stimTCR_obj$barcode[stimTCR_obj$is_unstim_overlap]) + 
+  NoLegend() + 
+  ggtitle("Unstimulated \n Overlapping TCRs")
+p3= DimPlot(stimTCR_obj,cells.highlight= stimTCR_obj$barcode[(stimTCR_obj$is_overlap & stimTCR_obj$is_unstim_overlap == F)]) + 
+  NoLegend() + 
+  ggtitle("Other \n Overlapping TCRs")
+
+p1 | p2 | p3
+```
+
+
+```{r,plot_vec, message= F, warning= F, fig.dim= plot_vec}
+DimPlot(stimTCR_obj, split.by= "severity", group.by= "severity")
+DimPlot(stimTCR_obj, split.by= "calc_age_bin", group.by= "calc_age_bin")
+DimPlot(stimTCR_obj, group.by= "antigen", split.by= "antigen")
+
+## Regression Model of the overlap by age 
+regression_data= stimTCR_MD %>% 
+  group_by(subject_id) %>%
+  mutate(prop_overlap= round(sum(is_overlap)/n(),digits= 2),
+         prop_unstim_overlap= round(sum(is_unstim_overlap)/n(),digits= 2)) %>%
+  ungroup()
+
+overlap_model= lm(data= regression_data, formula= prop_overlap ~ age)
+summary(overlap_model)
+
+r1= ggplot(regression_data, aes(x= age, y= prop_overlap, color= severity)) + 
+  geom_point() +
+  geom_smooth(method= "lm", formula= y ~ x, color= "black") +
+  annotate("text",
+           label= paste0(round(overlap_model$coefficients[2], digits= 4),
+                         "*age (years)"),
+           x= 30, y= 0.4) +
+  ggtitle("Adjusted R^2 value of 0.018")
+
+
+
+unstim_overlap_model= lm(data= regression_data, 
+                         formula= prop_unstim_overlap ~ age)
+summary(unstim_overlap_model)
+r2= ggplot(regression_data, aes(x= age, y= prop_unstim_overlap, color= severity)) +
+  geom_point() + 
+  geom_smooth(method= "lm", formula= y ~ x, color= "black") + 
+  annotate("text",
+           label= paste0(round(unstim_overlap_model$coefficients[2], digits= 4),
+                         "*age (years)"),
+           x= 30, y= 0.4) +
+  ggtitle("Adjusted R^2 value of 0.064")
+r1 | r2
+
+regression_data %>%
+  distinct(subject_id, severity, calc_age_bin, prop_overlap, prop_unstim_overlap) %>% 
+  datatable
+
+overlap_model_w_age= lm(data= regression_data, 
+                        formula= prop_overlap ~ age * severity)
+summary(overlap_model_w_age)
+
+unstim_overlap_model_w_age= lm(data= regression_data, 
+                        formula= prop_unstim_overlap ~ age * severity)
+summary(unstim_overlap_model_w_age)
+
+
+sev_plot_data= stimTCR_MD %>% 
+  group_by(severity) %>% 
+  mutate(overlap_count= sum(is_overlap),
+         prop_overlap_sev= overlap_count/n()) %>%
+  distinct(severity, overlap_count, prop_overlap_sev)
+ggplot(sev_plot_data, aes(x= severity, y= prop_overlap_sev, fill= severity)) +
+  geom_col()
+ggplot(sev_plot_data, aes(x= severity, y= overlap_count, fill= severity)) + 
+  geom_col()
+
+sev_age_plot_data= stimTCR_MD %>% 
+  group_by(severity, calc_age_bin) %>% 
+  mutate(overlap_count= sum(is_overlap),
+         prop_overlap= overlap_count/n(),
+         calc_age_bin= factor(calc_age_bin, levels= c("Pediatric","Adult","Geriatric"))) %>% 
+  distinct(severity, calc_age_bin, overlap_count, prop_overlap)
+ggplot(sev_age_plot_data, aes(x= severity, y= prop_overlap, fill= calc_age_bin)) +
+  geom_col(position= "dodge") 
+ggplot(sev_age_plot_data, aes(x= severity, y= overlap_count, fill= calc_age_bin)) +
+  geom_col(position= "dodge")
+```
+
+
+<!-- It looks like age is significant, but it has a super small effect, and the slope seems to be driven in part by the big outliers.
+
+The larger number and percentage of outliers in severe individuals is consistent with the idea that direct ex vivo stimulated T cells are the source of the overlapping TCRs. (Direct ex vivo stimulated meaning that the T cells were activated in vivo.) -->
+
+## Overlapping RNA Expression Profile
+
+- Genes ordered by AUC  
+
+```{r, fig.dim= c(11,30), message= F, warning= F}
+##-----------
+# Overlapping RNA Expression Profile
+##-----------
+DefaultAssay(stimTCR_obj) <- "RNA"
+
+Idents(stimTCR_obj)= "is_overlap"
+# overlap_genes_df= FindAllMarkers(stimTCR_obj, test.use= "roc") %>%
+#   filter(cluster == F) %>%
+#   arrange(desc(myAUC))
+  ## use roc as opposed to wilcox
+  ## Clusters are doubled b/c compared against a control group
+path= here("stim_TCRs","data","overlap_genes_df.csv")
+# write.csv(overlap_genes_df,
+#           path,
+#           row.names = F)
+overlap_genes_df= read.csv(path)
+position_data= as.data.frame(stimTCR_obj[["wnn.umap"]]@cell.embeddings)
+position_data$barcode= row.names(position_data)
+stimTCR_MD= left_join(stimTCR_MD, position_data, by= "barcode")
+# path= here("stim_TCRs","data","stimTCR_w_overlapping.csv")
+# write.csv(stimTCR_MD, path, row.names= F)
+
+
+overlap_features= overlap_genes_df$gene
+overlap_features= c("LTB", "TNFRSF4", "TXN", "CD40LG", "TMSB10", "PFN1", 
+                    "PRDX1", "TNFRSF18", "GZMB", "PTPRC", "GZMH", "PRF1",
+                    "GNLY","CST7", "CCL5")
+  
+stimFeat.list <- list()
+
+overlap_MD= stimTCR_MD %>% filter(is_overlap)
+RNA_data= stimTCR_obj@assays[["RNA"]]@data %>%
+  as.data.frame() %>% 
+  t() %>% 
+  as.data.frame() %>%
+  filter(row.names(.) %in% overlap_MD$barcode)
+
+for(feat in overlap_features){
+  overlap_MD$tmp= RNA_data[,feat]
+  stimFeat.list[[feat]]= ggplot(overlap_MD) +
+      aes(x= wnnUMAP_1, y= wnnUMAP_2, color= tmp) +
+      geom_point(size= 1) +
+      scale_color_viridis_c() + 
+      ggtitle(feat)
+}
+wrap_plots(stimFeat.list, ncol= 3)
+```
+
+```{r, fig.dim= plot_vec, message= F, warning= F}
+
+  ## I'm pretty sure this is showing all the cells that express that gene.
+  ## I could make this more specific w/ Dimplots and highligt cells.
+  ## Not sure if I want to. 
+
+## Lympotoxin beta, TNFRSF4, TXN, CD40LG, TMSB10, PFN1, 
+
+## LTB     - lymphotoxin beta
+## TNFRSF4 - aka CD134/OX40 (This is super interesting.)
+## TXN     - thioredoxin
+## CD40LG  - different than CD40L? expressed on activated T cellls 
+## TMSB10  - beta-thymosin, not sure the relevance beyond actin remodeling and some influence w/ M1 macrophages
+## PFN1    - regulates actin polymerization (Related to TMSB10?)
+## MYL6    - myosin light polypeptide 6 
+## RPS     - ribosomal protein group S
+## RPL     - ribosomal protein group L 
+
+
+## PRDX1    - Peroxiredoxin 1 (may be proliferative or antiviral for CD8 T cells)
+## ACTB     - beta-actin 
+## PSME2    - Proteasome activator complex subunit 2 
+## TNFRSF18 - (Big AUC drop after this gene)
+## GZMB     - Granzyme B
+## HLA-C    - 
+## PTPRC    - aka CD45 
+## CD52     - 
+## BTG1     - active in T cell quiescence 
+
+## CD8A    - 
+## MALAT1  -
+## GZMH    - 
+## PRF1    -
+## ZFP36L2 - 
+## HLA-A   - 
+## GNLY    - 
+## CST7    -
+## NKG7    - 
+## MT-CO1  -
+## CCL5    -
+
+
+## Which group is upregulated where? 
+
+heatmap_data= overlap_obj@assays[["RNA"]]@data %>% 
+  as.data.frame() %>% 
+  filter(row.names(.) %in% overlap_genes_df$gene)
+heatmap_data= heatmap_data[,colnames(heatmap_data) %in% overlap_obj@meta.data$barcode] %>% 
+              as.matrix
+hm_palette <- rev(colorRampPalette(colors = c("yellow","black","magenta"))(100))
+
+pheatmap(heatmap_data,
+         cluster_cols= F,
+         cluster_rows= F,
+         show_colnames= F,
+         color= hm_palette,
+         main= "RNA expression of cells w/overlapping TCRs")
+  ## The issue with DoHeatmap is that the subsetting wasn't working b/c 
+  ## the dim of meta.data and RNA assay was not the same. 
+```
+
+
+## Overlapping ADT Expression Profile
+```{r, fig.dim= plot_vec, message= F, warning= F}
+##-----------
+# Overlapping ADT Expression Profile
+##-----------
+DefaultAssay(stimTCR_obj) <- "ADT"
+Idents(stimTCR_obj)= "is_overlap"
+
+# overlap_ADT_df= FindAllMarkers(stimTCR_obj, test.use= "roc") %>%
+#   filter(cluster == F) %>% 
+#   arrange(desc(myAUC))
+path= here("stim_TCRs","data","overlap_ADT_df.csv")
+#write.csv(overlap_ADT_df, path, row.names = F)
+overlap_ADT_df= read.csv(path)
+
+DefaultAssay(overlap_obj)= "ADT"
+ADT_data= stimTCR_obj@assays[["ADT"]]@counts %>%
+  as.data.frame() %>% 
+  t() %>% 
+  as.data.frame() %>%
+  filter(row.names(.) %in% overlap_MD$barcode)
+
+overlap_ADTs= overlap_ADT_df$gene
+stimADT.list <- list()
+
+
+for(feat in overlap_ADTs){
+  overlap_MD$tmp= ADT_data[,feat]
+  stimADT.list[[feat]]= ggplot(overlap_MD) +
+      aes(x= wnnUMAP_1, y= wnnUMAP_2, color= tmp) +
+      geom_point(size= 1) +
+      scale_color_viridis_c() + 
+      ggtitle(feat)
+}
+wrap_plots(stimADT.list, ncol= 3)
+```
+
+
+```{r, fig.dim= plot_vec, message= F, warning= F}
+heatmap_data= overlap_obj@assays[["ADT"]]@data %>% 
+  as.data.frame() %>% 
+  filter(row.names(.) %in% overlap_ADT_df$gene)
+heatmap_data= heatmap_data[,colnames(heatmap_data) %in% overlap_obj@meta.data$barcode] %>% 
+  as.matrix
+hm_palette <- rev(colorRampPalette(colors = c("yellow","black","magenta"))(100))
+
+pheatmap(heatmap_data,
+         cluster_cols= F,
+         cluster_rows= F,
+         show_colnames= F,
+         color= hm_palette,
+         main= "ADT expression of cells w/overlapping TCRs")
+```
+
+
+## Cells with TCRs that overlap w/ Unstimultaed RNA Expression Profile
+```{r, fig.dim= c(11,30), warning= F, message= F}
+##-----------
+# TCRs Overlapping w/ Unstimultaed RNA Expression Profile
+##-----------
+DefaultAssay(stimTCR_obj)= "RNA"
+Idents(stimTCR_obj) = "is_unstim_overlap" 
+# unstim_overlap_genes_df= FindAllMarkers(stimTCR_obj, test.use= "roc") %>%
+#   filter(cluster == F) %>% 
+#   arrange(desc(myAUC))
+path= here("stim_TCRs","data","unstim_overlap_genes_df.csv")
+#write.csv(unstim_overlap_genes_df, path, row.names= F) 
+unstim_overlap_genes_df= read.csv(path)
+
+unstim_overlap_RNAs= unstim_overlap_genes_df$gene
+unstim_overlap_RNAs= c("LTB","TNFRSF4","CD40LG","TXN","MAL","TMSB10","PFN1",
+                       "PRDX1","PTPRC","HOPX","CCL4","GZMB","GZMH","PRF1","GNLY",
+                       "CCL5","NKG7")
+  ## subsetting b/c too many 
+  ## A lot of ribosomal proteins were significant for some reason
+  ## Would that be an indicator of protein translation due to activation? 
+unstim_overlapRNA.list <- list()
+unstim_overlap_MD= stimTCR_MD %>% filter(is_overlap)
+
+unstim_RNA_data= stimTCR_obj@assays[["RNA"]]@counts %>%
+  as.data.frame() %>% 
+  t() %>% 
+  as.data.frame() %>%
+  filter(row.names(.) %in% unstim_overlap_MD$barcode)
+
+for(feat in unstim_overlap_RNAs){
+  unstim_overlap_MD$tmp= unstim_RNA_data[,feat]
+  unstim_overlapRNA.list[[feat]]= ggplot(unstim_overlap_MD) +
+      aes(x= wnnUMAP_1, y= wnnUMAP_2, color= tmp) +
+      geom_point(size= 1) +
+      scale_color_viridis_c() + 
+      ggtitle(feat)
+}
+wrap_plots(unstim_overlapRNA.list, ncol = 3)
+```
+
+A lot of ribosomal proteins were significant for some reason. Would that be an indicator of protein translation due to activation? 
+
+```{r, fig.dim= plot_vec, message= F, warning= F}
+heatmap_data= unstim_overlap_obj@assays[["RNA"]]@data %>% 
+  as.data.frame() %>%
+  filter(row.names(.) %in% unstim_overlap_genes_df$gene)
+heatmap_data= heatmap_data[,colnames(heatmap_data) %in% overlap_obj@meta.data$barcode] %>% 
+  as.matrix
+hm_palette <- rev(colorRampPalette(colors = c("yellow","black","magenta"))(100))
+
+pheatmap(heatmap_data[1:ceiling(nrow(heatmap_data)/2),],
+         cluster_cols= F,
+         cluster_rows= F,
+         show_colnames= F,
+         color= hm_palette,
+         main= "RNA expression of cells w/ TCRs that overlap w/ unstimulated TCRs")
+  ## First half of the genes
+
+pheatmap(heatmap_data[ceiling(nrow(heatmap_data)/2):nrow(heatmap_data),],
+         cluster_cols= F,
+         cluster_rows= F,
+         show_colnames= F,
+         color= hm_palette,
+         main= "RNA expression of cells w/ TCRs that overlap w/ unstimulated TCRs")
+  ## 2nd half of the genes
+```
+
+## Cells with TCRs that overlap w/ Unstimultaed ADT Expression Profile
+```{r, fig.dim= plot_vec, warning= F, message= F}
+##-----------
+# TCRs Overlapping w/ Unstimultaed ADT Expression Profile
+##-----------
+DefaultAssay(stimTCR_obj) <- "ADT"
+Idents(stimTCR_obj)= "is_unstim_overlap"
+
+# unstim_overlap_ADT_df= FindAllMarkers(stimTCR_obj, test.use= "roc") %>%
+#   filter(cluster == F) %>% 
+#   arrange(desc(myAUC))
+path= here("stim_TCRs","data","unstim_overlap_ADT_df.csv")
+# write.csv(unstim_overlap_ADT_df, path, row.names= F)
+unstim_overlap_ADT_df= read.csv(path)
+
+DefaultAssay(unstim_overlap_obj)= "ADT"
+unstim_ADT_data= stimTCR_obj@assays[["ADT"]]@counts %>%
+  as.data.frame() %>% 
+  t() %>% 
+  as.data.frame() %>%
+  filter(row.names(.) %in% unstim_overlap_MD$barcode)
+
+unstim_overlap_ADTs= unstim_overlap_ADT_df$gene
+overlap_unstimADT.list <- list()
+
+
+for(feat in unstim_overlap_ADTs){
+  overlap_MD$tmp= ADT_data[,feat]
+  overlap_unstimADT.list[[feat]]= ggplot(overlap_MD) +
+      aes(x= wnnUMAP_1, y= wnnUMAP_2, color= tmp) +
+      geom_point(size= 1) +
+      scale_color_viridis_c() + 
+      ggtitle(feat)
+}
+wrap_plots(overlap_unstimADT.list, ncol= 3)
+
+
+
+
+
+
+heatmap_data= unstim_overlap_obj@assays[["ADT"]]@data %>% 
+  as.data.frame() %>%
+  filter(row.names(.) %in% unstim_overlap_ADT_df$gene)
+heatmap_data= heatmap_data[,colnames(heatmap_data) %in% overlap_obj@meta.data$barcode] %>% 
+  as.matrix
+hm_palette <- rev(colorRampPalette(colors = c("yellow","black","magenta"))(100))
+
+pheatmap(heatmap_data,
+         cluster_cols= F,
+         cluster_rows= F,
+         show_colnames= F,
+         color= hm_palette,
+         main= "ADT expression of cells w/ TCRs that overlap w/ unstimulated TCRs")
+```
+
+### Overlapping TCRs by Antigen Group
+```{r, warning= F, message= F}
+##-----------
+# Overlapping TCRs by Antigen Group
+##-----------
+plot.list <- list()
+for(antigen in unique(stimTCR_obj$antigen)){
+  plot.list[[antigen]]= DimPlot(stimTCR_obj, 
+                                cells.highlight= stimTCR_obj$barcode[stimTCR_obj$antigen == antigen &
+                                                                     stimTCR_obj$is_overlap]) + 
+                        NoLegend() + 
+                        ggtitle(paste0(antigen))
+}
+wrap_plots(plot.list, ncol= 3)
+
+
+print("REMOVED TCRs") 
+removed= stimTCR_obj@meta.data %>% 
+  filter(is_overlap == T) %>% 
+  count(antigen) 
+total_counts= stimTCR_obj@meta.data %>% count(antigen) %>% pull(n)
+removed %>% mutate(`Proportion Removed`= round(removed$n/total_counts, digits= 2))
+
+print("REMAINING TCRs")
+remaining= stimTCR_obj@meta.data %>% 
+  filter(is_overlap == F) %>% 
+  count(antigen) 
+remaining 
+```
+
+
+
