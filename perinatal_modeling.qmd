@@ -4,7 +4,7 @@ format: html
 editor: visual
 ---
 
-**Gene names have been changed because the results have not been published. 
+**Gene names have been changed because the results have not been published.**
 
 ```{r setup, include= FALSE}
 knitr::opts_chunk$set(echo = F)
