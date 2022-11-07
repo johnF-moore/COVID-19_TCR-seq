@@ -1,8 +1,10 @@
 ---
-title: "Modeling Perinatal Data"
+title: "Modeling Perinatal Data for Gene1 and Gene2"
 format: html
 editor: visual
 ---
+
+**Gene names have been changed because the results have not been published. 
 
 ```{r setup, include= FALSE}
 knitr::opts_chunk$set(echo = F)
@@ -114,109 +116,109 @@ bspline_testing <- function(train_df, test_df, x, y, group_col, dfs, degree){
 ## Formatting Data
 
 ```{r}
-## cCasp3
-cCasp3 <- here("modeling_perinatal/data/cCasp3_for_John.csv") %>% 
+## Gene1
+gene1 <- here("modeling_perinatal/data/Gene1_for_John.csv") %>% 
   read.csv() %>% 
   pivot_longer(!X, names_to= "day") %>% 
   mutate(day= as.numeric(gsub("X|\\.\\d+","", day)),
          ln_value= log(value + 1e-6)) %>% 
   as.data.frame()
 
-cCasp3_pheno_day <- cCasp3 %>% 
+gene1_pheno_day <- gene1 %>% 
   group_by(X) %>% 
   count(day) %>% 
   ungroup() 
-ggplot(cCasp3_pheno_day, aes(x= day, y= n)) +
+ggplot(gene1_pheno_day, aes(x= day, y= n)) +
     geom_col() + 
     facet_wrap(~X) + 
     theme_bw() +
-    ggtitle("cCasp3 Phenotype & Day Distribution")
+    ggtitle("Gene1 Phenotype & Day Distribution")
 
 
-## CD5
-CD5 <- here("modeling_perinatal/data/CD5_RFI_for_John.csv") %>% 
+## Gene2
+gene2 <- here("modeling_perinatal/data/Gene2_RFI_for_John.csv") %>% 
   read.csv() %>% 
   pivot_longer(!X, names_to= "day") %>% 
   mutate(day= as.numeric(gsub("X|\\.\\d+", "", day)),
          ln_value= log(value + 1e-6)) %>% 
   as.data.frame()
 
-CD5_pheno_day <- CD5 %>% 
+gene2_pheno_day <- gene2 %>% 
   group_by(X) %>% 
   count(day)  %>% 
   ungroup() 
-ggplot(CD5_pheno_day, aes(x= day, y= n)) +
+ggplot(gene2_pheno_day, aes(x= day, y= n)) +
     geom_col() + 
     facet_wrap(~X) + 
     theme_bw() +
-    ggtitle("CD5 Phenotype & Day Distribution")
+    ggtitle("Gene2 Phenotype & Day Distribution")
 ```
 
 ## Upsampling
 
 ```{r}
-## cCasp3
-cCasp3_upsample <- cCasp3 %>% 
-  left_join(cCasp3_pheno_day, by= c("X","day")) %>% 
+## Gene1
+Gene1_upsample <- gene1 %>% 
+  left_join(gene1_pheno_day, by= c("X","day")) %>% 
   group_by(X) %>% 
   mutate(max_counts= max(n)) %>% 
   ungroup() 
-cCasp3_max_n= unique(cCasp3_upsample$max_counts)
+gene1_max_n= unique(gene1_upsample$max_counts)
 
-cCasp3_upsample <- cCasp3_upsample %>% 
+gene1_upsample <- gene1_upsample %>% 
   group_by(X, day) %>% 
-  slice_sample(n= cCasp3_max_n, replace = TRUE) %>% 
+  slice_sample(n= gene1_max_n, replace = TRUE) %>% 
   ungroup()
 
-## CD5
-CD5_upsample <- left_join(CD5, CD5_pheno_day, by= c("X","day")) %>% 
+## Gene2
+gene2_upsample <- left_join(gene2, gene2_pheno_day, by= c("X","day")) %>% 
   group_by(X) %>% 
   mutate(max_counts= max(n)) %>% 
   ungroup() 
-CD5_max_n= unique(CD5_upsample$max_counts)
+gene2_max_n= unique(gene2_upsample$max_counts)
 
-CD5_upsample <- CD5_upsample %>% 
+gene2_upsample <- gene2_upsample %>% 
   group_by(X, day) %>% 
-  slice_sample(n= CD5_max_n, replace = TRUE) %>% 
+  slice_sample(n= gene2_max_n, replace = TRUE) %>% 
   ungroup()
 ```
 
-## cCasp3 Modeling
+## Gene1 Modeling
 
 ### Simple Linear Regression
 
 ```{r, message= FALSE}
-model_facet_plot(df= cCasp3_upsample,x= "day", y= "value", 
-                 lm_group= "X",title= "cCasp3 - Raw")
+model_facet_plot(df= gene1_upsample, x= "day", y= "value", 
+                 lm_group= "X", title= "gene1 - Raw")
 
-datatable(lm_summaries(cCasp3_upsample, group_col= "X", x= "day", y= "value"))
+datatable(lm_summaries(gene1_upsample, group_col= "X", x= "day", y= "value"))
 ```
 
 Linear modeling achieves significance, but the R^2^-values are poor.
 
 ```{r, message= FALSE}
-model_facet_plot(cCasp3_upsample,x= "day", y= "ln_value",
-                 lm_group= "X",title= "cCasp3 - Log")
+model_facet_plot(gene1_upsample,x= "day", y= "ln_value",
+                 lm_group= "X",title= "gene1 - Log")
 
-datatable(lm_summaries(cCasp3_upsample, group_col= "X", x= "day", y= "ln_value"))
+datatable(lm_summaries(gene1_upsample, group_col= "X", x= "day", y= "ln_value"))
 ```
 
-## cCasp3 Train Test Split
+## Gene1 Train Test Split
 
 ```{r}
 set.seed(123)
-train_test_cCasp3 <-stratified(cCasp3_upsample, 
+train_test_gene1 <-stratified(gene1_upsample, 
                                group= c("X", "day"), 
                                size= 0.8, 
                                bothSets= TRUE)
-train_cCasp3 <- as.data.frame(train_test_cCasp3[[1]])
-test_cCasp3  <- as.data.frame(train_test_cCasp3[[2]])
+train_gene1 <- as.data.frame(train_test_gene1[[1]])
+test_gene1  <- as.data.frame(train_test_gene1[[2]])
 ```
 
-## Spline Regression on raw cCasp3
+## Spline Regression on raw gene1
 ```{r, message= FALSE}
-bspline_testing(train_df= train_cCasp3,
-                test_df= test_cCasp3,
+bspline_testing(train_df= train_gene1,
+                test_df= test_gene1,
                 x= "day",
                 y= "value",
                 group_col= "X",
@@ -225,10 +227,10 @@ bspline_testing(train_df= train_cCasp3,
                 )
 ```
 
-## Spline Regression on log cCasp3
+## Spline Regression on log gene1
 ```{r, message= FALSE}
-bspline_testing(train_df= train_cCasp3,
-                test_df= test_cCasp3,
+bspline_testing(train_df= train_gene1,
+                test_df= test_gene1,
                 x= "day",
                 y= "ln_value",
                 group_col= "X",
@@ -237,40 +239,40 @@ bspline_testing(train_df= train_cCasp3,
                 )
 ```
 
-## CD5 Modeling
+## Gene2 Modeling
 
 ### Simple Linear Regression
 
 ```{r, eval= TRUE}
-model_facet_plot(df= CD5, x= "day", y= "value", 
-                 lm_group= "X", title= "CD5 - Raw")
+model_facet_plot(df= gene2, x= "day", y= "value", 
+                 lm_group= "X", title= "Gene2 - Raw")
 
-datatable(lm_summaries(df= CD5, group_col= "X", 
+datatable(lm_summaries(df= gene2, group_col= "X", 
                        x= "day", y= "ln_value"))
 ```
 
 ```{r}
-model_facet_plot(df= CD5, x= "day", y= "ln_value", 
-                 lm_group= "X", title= "CD5 - LN")
-datatable(lm_summaries(df= CD5, group_col= "X", 
+model_facet_plot(df= gene2, x= "day", y= "ln_value", 
+                 lm_group= "X", title= "Gene2 - LN")
+datatable(lm_summaries(df= gene2, group_col= "X", 
                        x= "day", y= "ln_value"))
 ```
 
-## CD5 Train Test Split
+## Gene2 Train Test Split
 ```{r}
 set.seed(123)
-train_test_CD5 <-stratified(CD5_upsample, 
-                            group= c("X", "day"), 
-                            size= 0.8, 
-                            bothSets= TRUE)
-train_CD5 <- as.data.frame(train_test_CD5[[1]])
-test_CD5  <- as.data.frame(train_test_CD5[[2]])
+train_test_gene2 <-stratified(gene2_upsample, 
+                              group= c("X", "day"), 
+                              size= 0.8, 
+                              bothSets= TRUE)
+train_gene2 <- as.data.frame(train_test_gene2[[1]])
+test_gene2  <- as.data.frame(train_test_gene2[[2]])
 ```
 
-## Spline Regression on raw CD5
+## Spline Regression on raw Gene2
 ```{r, message= FALSE}
-bspline_testing(train_df= train_CD5,
-                test_df= test_CD5,
+bspline_testing(train_df= train_gene2,
+                test_df= test_gene2,
                 x= "day",
                 y= "value",
                 group_col= "X",
@@ -279,10 +281,10 @@ bspline_testing(train_df= train_CD5,
                 )
 ```
 
-## Spline Regression on log CD5
+## Spline Regression on log gene2
 ```{r, message= FALSE}
-bspline_testing(train_df= train_CD5,
-                test_df= test_CD5,
+bspline_testing(train_df= train_gene2,
+                test_df= test_gene2,
                 x= "day",
                 y= "ln_value",
                 group_col= "X",
@@ -290,105 +292,4 @@ bspline_testing(train_df= train_CD5,
                 degree= 1
                 )
 ```
-I think this works okay. I'm not sure what we'll do with these results. 
-The p-values are obviously not reliable.
-The sample size is also super low for spline regression. 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r, eval= FALSE}
-##--------------------------------------------
-# Other modeling code I decided not to go with
-##--------------------------------------------
-
-cCasp3_model <- smooth.spline(train_cCasp3$day, 
-                              train_cCasp3$value, 
-                              df= 6)
-  ## Should I use nkots or df?
-    ## The difference isn't clear to me. 
-    ## df looks way better though. 
-
-broom::augment(cCasp3_model) %>% 
-  ggplot(aes(x= x, y= y, group= x)) +
-    geom_boxplot(outlier.alpha = 0) + 
-    geom_point() +
-    geom_line(inherit.aes= FALSE, aes(x= x, y= .fitted)) +
-    theme_bw()
-  ## It still might be worth changing the train data to be equally weighted across time points. 
-
-df= train_cCasp3
-y= "value"
-x= "day"
-group_col= "X"
-spline_regression_summaries <- function(){}
-lm_summary <- df %>%
-  nest(data = -{{group_col}}) %>% 
-  mutate(
-    fit= map(
-      data,
-      ~{ 
-        map1_data= .x
-        formula=as.formula(paste0("map1_data$", y," ~ ", "map1_data$", x))
-        map(2:5, ~augment(smooth.spline(formula, df= .x), new_data) %>% 
-              mutate(df= .x))
-        ## Instead of using smooth.spline, I can use splines::bs and
-        ## feed that into a linear model. 
-        ## I can then capture the summary(model) in the map.
-        ## Something like:
-          ## formula= as.formula(paste0("map1_data$", y, "~ ", 
-                                        ## splines::bs(## something)))
-        ## summary(lm(formula))
-        ## It might be nice to keep this function and make a separate one 
-        ## for the p-value with summary. 
-        ## I'll need to have the model generation be the same though. 
-        })) %>%
-    ## Spline regression for each group at various degrees of freedom
-  select(X, fit) %>%
-  unnest(cols = fit) %>% 
-  unnest(cols = fit)
-
-parameter_grid <- floor(expand.grid(degree= 1:4, 
-                                    nprune= seq(5, 50, 5)))
-cv_mars_cCasp3 <- caret::train(x= train_cCasp3[,"day", drop= FALSE],
-                               y= train_cCasp3[,"value"],
-                               method= "earth",
-                               metric= "RMSE",
-                               trControl= trainControl(method= "cv", 
-                                                       number= 10),
-                               tuneGrid= parameter_grid)
-
-ggplot(cv_mars_cCasp3) + theme_cowplot()
-
-preds <- predict.train(cv_mars_cCasp3, newdata = test_cCasp3)
-# test <- predict.list(cv_mars_cCasp3, newdata= test_cCasp3)
-
-smsp_model <- smooth.spline(x= , y=)
-      test <- predict(model, list(test_df[,y,drop= TRUE]))
-      test_fit <- predict.train(model, 
-                                testX= test_group[,x,drop= TRUE]) %>% 
-        mutate(degF= i)
-
-test_cCasp3 %>% 
-  mutate(preds= preds) %>%
-  pivot_longer(cols= c(preds, value), 
-               names_to= "source",values_to= "y") %>%
-  mutate(day_source= paste0(day,"_",source)) %>% 
-  ggplot(aes(x= day, y= y, color= source, group= day_source)) + 
-    geom_boxplot() +
-    theme_cowplot()
-```
