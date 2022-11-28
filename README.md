@@ -1,5 +1,5 @@
 # COVID-19 TCR-seq
-Single-cell TCR-seq for peripheral blood mononuclear cells from patients with COVID-19
+**Single-cell TCR-seq for peripheral blood mononuclear cells from patients with COVID-19**
 
 Code to process the sequencing reads is at TRUST_covid_run_041822.sh
 
