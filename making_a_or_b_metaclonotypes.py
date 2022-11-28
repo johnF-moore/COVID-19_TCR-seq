@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 
 """
-This functions encapsulates a complete work flow for finding meta-clonotypes 
-in antigen-enriched data.
-
-prepare docker container:
-apt-get install unzip
-python3 -c "from tcrsampler.setup_db import install_all_next_gen; install_all_next_gen(dry_run = False)"
+This script was adapted from the TCRdist3 documentation. 
+I revised it to work for our data and to do our filtering.
+I also wrote a script to sample a reference alpha chain repertoire to compare against. 
 """
 import sys
 import os
@@ -29,7 +26,7 @@ from tcrdist.public import _neighbors_variable_radius
 from tcrdist.public import _neighbors_sparse_variable_radius
 from tcrdist.regex import _index_to_regex_str
 from general_sample_britanova_fnct import sample_df_bkgd
-    ## This is a script that I wrote. Beware. 
+    ## This is a script that I wrote.
 
 def find_metaclonotypes(
     user_chain,
@@ -803,68 +800,14 @@ def find_metaclonotypes(
 
 
 if __name__ == "__main__":
-    # find_metaclonotypes(user_chain = "alpha", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/TCR_clusters/TCRdist/tcrdist3_analysis/data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/TCR_clusters/TCRdist/tcrdist3_analysis/output/alpha_MCs',
-    #                     ncpus= 8
-    #                     )
-
-    # find_metaclonotypes(user_chain = "beta", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/TCR_clusters/TCRdist/tcrdist3_analysis/data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/TCR_clusters/TCRdist/tcrdist3_analysis/output/beta_MCs',
-    #                     ncpus= 8)
-
-    # find_metaclonotypes(user_chain = "alpha", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/alpha_sub3_red3',
-    #                     ncpus= 8,
-    #                     min_subjects= 3,
-    #                     min_redundancy= 3)
-
-    # find_metaclonotypes(user_chain = "beta", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/beta_sub3_red3',
-    #                     ncpus= 8,
-    #                     min_subjects= 3,
-    #                     min_redundancy= 3)
-
-    # find_metaclonotypes(user_chain = "alpha", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/alpha_sub2_red2',
-    #                     ncpus= 8,
-    #                     min_subjects= 2,
-    #                     min_redundancy= 2)
-
-    # find_metaclonotypes(user_chain = "beta", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/beta_sub2_red2',
-    #                     ncpus= 8,
-    #                     min_subjects= 2,
-    #                     min_redundancy= 2)
-
-    # find_metaclonotypes(user_chain = "alpha", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/alpha_sub2_red3',
-    #                     ncpus= 8,
-    #                     min_subjects= 2,
-    #                     min_redundancy= 3)
-
-    # find_metaclonotypes(user_chain = "beta", 
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/TCRdist_input_062922.csv',
-    #                     out_path='/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/beta_sub2_red3',
-    #                     ncpus= 8,
-    #                     min_subjects= 2,
-    #                     min_redundancy= 3)
-
-
-    # find_metaclonotypes(user_chain= "beta",
-    #                     input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/stim_and_ref_TCRs_072222.csv',
-    #                     out_path= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/stimRef_sub2_red1',
-    #                     ncpus= 10,
-    #                     min_subjects= 2,
-    #                     min_redundancy= 1)
-#'/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/stim_and_ref_TCRs_072122.csv'
-#'/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/stim_and_ref_TCRs_072222.csv'
+  
+    find_metaclonotypes(user_chain= "alpha",
+                        input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/stim_and_ref_TCRs_072222.csv',
+                        out_path= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/stimRef_sub2_red1',
+                        ncpus= 10,
+                        min_subjects= 2,
+                        min_redundancy= 1)
+    
     find_metaclonotypes(user_chain= "beta",
                         input_file= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/input_data/stim_and_ref_TCRs_072222.csv',
                         out_path= '/stor/work/Ehrlich_COVID19/Users/John/projects/stim_TCRs/TCRdist/tcrdist3_analysis/output/stimRef_sub2_red1',
