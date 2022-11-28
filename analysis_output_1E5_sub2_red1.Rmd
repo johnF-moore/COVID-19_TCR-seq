@@ -17,7 +17,7 @@ library(ggplot2)
 
 
 
-
+I wrote a function wrapper to automate my analysis of TCR metaclonotype (clustering) output from TCRdist3. 
 
 
 ```{r}
@@ -279,15 +279,5 @@ nrow(alpha_MCs[alpha_MCs$bkgd_hits <= 22,])
   ## That would remove half of the rows
 alpha_MCs %>% mutate(isSmallWorld= ) %>% filter(!isSmallWorld)
 ```
-
-
-
-
-
-
-
-
-
-
 
 
