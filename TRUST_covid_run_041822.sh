@@ -2,8 +2,11 @@
 
 # The goal of this script is to run TRUST4 to pull all TCR sequences with V gene allele information from the
 # TCR fastq output from Cellranger. Cellranger as of 10/31/21 doesn't support v gene allele information.
-
 N=5
+# I parallelized the bash script to run N TRUST4 jobs at a time. 
+
+
+
 dir=/stor/work/Ehrlich_COVID19/analysis/cellranger/T_cell_activated
 run=run_covid-reactive_041822
 cd $dir
