@@ -1,10 +1,10 @@
 # COVID-19 TCR-seq
-Code to analyze scTCR-seq for peripheral blood mononuclear cells from patients with COVID-19
+Single-cell TCR-seq for peripheral blood mononuclear cells from patients with COVID-19
 
+Code to process the sequencing reads is at TRUST_covid_run_041822.sh
 
+Code to identify RNA signatures of potential TCR experimental issues is at RNA_expression_of_overlapping_TCRs.Rmd
 
-![Screen Shot 2022-11-07 at 12 35 14 AM](https://user-images.githubusercontent.com/98127654/200241380-fbf4545a-b018-4d7d-a5b1-fbb88dbc005c.png)
+Clustering of the single-cell TCR-seq data using TCRdist3 is done in making_a_or_b_metaclonotypes.py
 
-Simple Good-Turing Frequency Estimation to determine the sample coverage of each patients' TCR-seq populations. 
-
-
+Automated analyses of the TCRdist3 clusters is done using some functions I wrote in analysis_output_1E5_sub2_red1.Rmd
