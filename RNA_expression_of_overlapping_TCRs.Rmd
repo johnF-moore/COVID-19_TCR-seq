@@ -21,6 +21,7 @@ path= "/stor/work/Ehrlich_COVID19/analysis/seurat/Qi_clustering/stimulatedTCR/st
 stimTCR_obj= readRDS(path)
 plot_vec= c(11,7)
 ```
+Seurat workflow looking at TCRs that were present in multiple groups to see if there was a signature that could confirm if these cells had a technical issue. 
 
 
 ```{r}
